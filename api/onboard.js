@@ -1,17 +1,18 @@
 // api/onboard.js
 //
-// This is the function Zoho's webhook will call every time a student
+// This is the function Zoho's webhook calls every time a student
 // submits the registration form. It:
 //   1. Reads the incoming data from Zoho
 //   2. Pulls out First Name, Last Name, Email, Password
 //   3. Calls the TalentLMS API to create the user
 //
-// IMPORTANT FIRST STEP: we don't yet know the exact field names Zoho
-// will send (that depends on how Zoho names them internally, which can
-// differ from the labels shown on the form). So this script starts in
-// "logging mode" — it will print out the FULL raw payload it receives
-// to the Vercel logs. Once we see one real submission, we lock in the
-// exact field names and remove the guesswork below.
+// Confirmed exact Zoho field names via the Webhooks Configuration
+// screen: First_Name, Last_Name, Email, Password.
+//
+// IMPORTANT: TalentLMS's v1 API expects classic form-encoded data
+// (application/x-www-form-urlencoded), NOT JSON. Sending JSON gets
+// silently ignored, which is why the first test just returned
+// TalentLMS's default user list instead of creating anyone.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -20,23 +21,12 @@ export default async function handler(req, res) {
 
   const payload = req.body;
 
-  // TEMP: log the raw payload so we can see exactly what Zoho sends.
-  // Check this in Vercel -> your project -> Deployments -> Functions -> Logs
   console.log('Raw Zoho payload:', JSON.stringify(payload, null, 2));
 
-  // --- Best-guess field extraction ---
-  // Zoho Forms webhooks typically send field data keyed by the field's
-  // internal "label" (which is usually close to, but not always
-  // identical to, what's shown on the form). We try a few likely
-  // variations here. Once we've seen a real payload, we'll replace
-  // this section with the exact keys.
-  const firstName =
-    payload.First_Name || payload.FirstName || payload['First Name'] || '';
-  const lastName =
-    payload.Last_Name || payload.LastName || payload['Last Name'] || '';
-  const email = payload.Email || payload.email || payload['Your Email'] || '';
-  const password =
-    payload.Password || payload.password || payload['Password'] || '';
+  const firstName = payload.First_Name || '';
+  const lastName = payload.Last_Name || '';
+  const email = payload.Email || '';
+  const password = payload.Password || '';
 
   if (!email || !password) {
     console.error('Missing required fields. Parsed values were:', {
@@ -46,8 +36,7 @@ export default async function handler(req, res) {
       password: password ? '(present)' : '(missing)',
     });
     return res.status(400).json({
-      error:
-        'Could not find required fields (email/password) in the payload. Check the Vercel logs for the raw payload and update the field mapping in api/onboard.js.',
+      error: 'Could not find required fields (email/password) in the payload.',
     });
   }
 
@@ -56,19 +45,24 @@ export default async function handler(req, res) {
 
   const authHeader = 'Basic ' + Buffer.from(`${TALENTLMS_API_KEY}:`).toString('base64');
 
+  // TalentLMS requires a "login" (username) as well as an email.
+  // Using the email address as the login is the simplest, reliable choice.
+  const formBody = new URLSearchParams({
+    login: email,
+    email: email,
+    first_name: firstName,
+    last_name: lastName,
+    password: password,
+  });
+
   try {
     const response = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/users`, {
       method: 'POST',
       headers: {
         Authorization: authHeader,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        password: password,
-      }),
+      body: formBody.toString(),
     });
 
     const result = await response.json();
