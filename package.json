@@ -1,0 +1,9 @@
+{
+  "name": "zoho-talentlms-onboarding",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless function that receives a Zoho Forms webhook and creates the matching student account in TalentLMS.",
+  "scripts": {
+    "dev": "vercel dev"
+  }
+}
