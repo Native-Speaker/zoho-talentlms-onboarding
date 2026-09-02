@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const response = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/users`, {
+    const response = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/usersignup`, {
       method: 'POST',
       headers: {
         Authorization: authHeader,
