@@ -45,10 +45,16 @@ export default async function handler(req, res) {
 
   const authHeader = 'Basic ' + Buffer.from(`${TALENTLMS_API_KEY}:`).toString('base64');
 
-  // TalentLMS requires a "login" (username) as well as an email.
-  // Using the email address as the login is the simplest, reliable choice.
+   // TalentLMS's "login" (username) field can be picky about characters
+  // that are perfectly valid in an email address (like "+"). So we
+  // generate a separate, safe login from the email's local part,
+  // stripping anything that isn't a letter, digit, dot, or underscore.
+  const safeLogin = email
+    .split('@')[0]
+    .replace(/[^a-zA-Z0-9._]/g, '');
+
   const formBody = new URLSearchParams({
-    login: email,
+    login: safeLogin,
     email: email,
     first_name: firstName,
     last_name: lastName,
