@@ -76,38 +76,37 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('TalentLMS user created successfully:', result);
+    console.log('User successfully enrolled in course 276 (ATU2627):', enrollResult);
 
-    // Now enroll the new user into ATU2627 (TalentLMS course id 276).
-    const newUserId = result.id;
-    const enrollBody = new URLSearchParams({
-      user_id: newUserId,
-      course_id: '276',
-    });
-
-    const enrollResponse = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/addusertocourse`, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: enrollBody.toString(),
-    });
-
-    const enrollResult = await enrollResponse.json();
-
-    if (!enrollResponse.ok) {
-      console.error('User created, but course enrollment failed:', enrollResult);
-      return res.status(200).json({
-        success: true,
-        user: result,
-        enrollmentWarning: 'User created but could not be enrolled in the course automatically',
-        enrollmentError: enrollResult,
-      });
+    // Safety net: automatically remove the new user from HUMPIS SCHULE
+    // (course id 271), regardless of TalentLMS's default-group setting.
+    let removalResult = null;
+    try {
+      const removeResponse = await fetch(
+        `https://${TALENTLMS_DOMAIN}/api/v1/removeuserfromcourse/user_id:${newUserId},course_id:271`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: authHeader,
+          },
+        }
+      );
+      removalResult = await removeResponse.json();
+      if (removeResponse.ok) {
+        console.log('User removed from HUMPIS SCHULE (course 271):', removalResult);
+      } else {
+        console.log('Could not remove user from course 271 (may not have been enrolled):', removalResult);
+      }
+    } catch (removeErr) {
+      console.error('Error trying to remove user from course 271:', removeErr);
     }
 
-    console.log('User successfully enrolled in course 276 (ATU2627):', enrollResult);
-    return res.status(200).json({ success: true, user: result, enrollment: enrollResult });
+    return res.status(200).json({
+      success: true,
+      user: result,
+      enrollment: enrollResult,
+      humpisRemoval: removalResult,
+    });
   } catch (err) {
     console.error('Error calling TalentLMS API:', err);
     return res.status(500).json({ error: 'Server error creating user' });
