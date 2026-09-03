@@ -5,14 +5,13 @@
 //   1. Reads the incoming data from Zoho
 //   2. Pulls out First Name, Last Name, Email, Password
 //   3. Calls the TalentLMS API to create the user
+//   4. Enrolls the new user into the ATU2627 course
 //
 // Confirmed exact Zoho field names via the Webhooks Configuration
 // screen: First_Name, Last_Name, Email, Password.
 //
 // IMPORTANT: TalentLMS's v1 API expects classic form-encoded data
-// (application/x-www-form-urlencoded), NOT JSON. Sending JSON gets
-// silently ignored, which is why the first test just returned
-// TalentLMS's default user list instead of creating anyone.
+// (application/x-www-form-urlencoded), NOT JSON.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -40,15 +39,11 @@ export default async function handler(req, res) {
     });
   }
 
-  const TALENTLMS_DOMAIN = process.env.TALENTLMS_DOMAIN; // e.g. nativespeaker.talentlms.com
+  const TALENTLMS_DOMAIN = process.env.TALENTLMS_DOMAIN;
   const TALENTLMS_API_KEY = process.env.TALENTLMS_API_KEY;
 
   const authHeader = 'Basic ' + Buffer.from(`${TALENTLMS_API_KEY}:`).toString('base64');
 
-   // TalentLMS's "login" (username) field can be picky about characters
-  // that are perfectly valid in an email address (like "+"). So we
-  // generate a separate, safe login from the email's local part,
-  // stripping anything that isn't a letter, digit, dot, or underscore.
   const safeLogin = email
     .split('@')[0]
     .replace(/[^a-zA-Z0-9._]/g, '');
@@ -83,7 +78,37 @@ export default async function handler(req, res) {
     }
 
     console.log('TalentLMS user created successfully:', result);
-    return res.status(200).json({ success: true, user: result });
+
+    // Now enroll the new user into ATU2627 (TalentLMS course id 276).
+    const newUserId = result.id;
+    const enrollBody = new URLSearchParams({
+      user_id: newUserId,
+      course_id: '276',
+    });
+
+    const enrollResponse = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/addusertocourse`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: enrollBody.toString(),
+    });
+
+    const enrollResult = await enrollResponse.json();
+
+    if (!enrollResponse.ok) {
+      console.error('User created, but course enrollment failed:', enrollResult);
+      return res.status(200).json({
+        success: true,
+        user: result,
+        enrollmentWarning: 'User created but could not be enrolled in the course automatically',
+        enrollmentError: enrollResult,
+      });
+    }
+
+    console.log('User successfully enrolled in course 276 (ATU2627):', enrollResult);
+    return res.status(200).json({ success: true, user: result, enrollment: enrollResult });
   } catch (err) {
     console.error('Error calling TalentLMS API:', err);
     return res.status(500).json({ error: 'Server error creating user' });
