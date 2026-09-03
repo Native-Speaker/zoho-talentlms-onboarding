@@ -54,11 +54,10 @@ export default async function handler(req, res) {
     first_name: firstName,
     last_name: lastName,
     password: password,
-    role: 'learner',
   });
 
   try {
-    const response = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/users`, {
+    const response = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/usersignup`, {
       method: 'POST',
       headers: {
         Authorization: authHeader,
