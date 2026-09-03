@@ -5,7 +5,8 @@
 //   1. Reads the incoming data from Zoho
 //   2. Pulls out First Name, Last Name, Email, Password
 //   3. Calls the TalentLMS API to create the user
-//   4. Enrolls the new user into the ATU2627 course
+//   4. Enrolls the new user into the ATU course (id 276)
+//   5. Removes the new user from HUMPIS SCHULE (id 271), as a safety net
 //
 // Confirmed exact Zoho field names via the Webhooks Configuration
 // screen: First_Name, Last_Name, Email, Password.
@@ -76,7 +77,37 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('User successfully enrolled in course 276 (ATU2627):', enrollResult);
+    console.log('TalentLMS user created successfully:', result);
+
+    // Enroll the new user into the ATU course (TalentLMS course id 276).
+    const newUserId = result.id;
+    const enrollBody = new URLSearchParams({
+      user_id: newUserId,
+      course_id: '276',
+    });
+
+    const enrollResponse = await fetch(`https://${TALENTLMS_DOMAIN}/api/v1/addusertocourse`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: enrollBody.toString(),
+    });
+
+    const enrollResult = await enrollResponse.json();
+
+    if (!enrollResponse.ok) {
+      console.error('User created, but course enrollment failed:', enrollResult);
+      return res.status(200).json({
+        success: true,
+        user: result,
+        enrollmentWarning: 'User created but could not be enrolled in the course automatically',
+        enrollmentError: enrollResult,
+      });
+    }
+
+    console.log('User successfully enrolled in course 276 (ATU):', enrollResult);
 
     // Safety net: automatically remove the new user from HUMPIS SCHULE
     // (course id 271), regardless of TalentLMS's default-group setting.
